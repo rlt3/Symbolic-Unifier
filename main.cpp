@@ -1,6 +1,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <string>
+#include <vector>
 
 /*
  * TODO:
@@ -42,8 +43,12 @@ next_string (std::string str, int *offset)
     return str.substr(skip, pos);
 }
 
-int
-main (int argc, char **argv)
+/*
+ * Parse whitespace-delimited arguments (including those passed as quoted
+ * strings) and push them into the list given by reference.
+ */
+void
+parse_args (std::vector<std::string> &list, int argc, char **argv)
 {
     int i;      /* argv index */
     int n;      /* position of substring in argv[i] */
@@ -53,10 +58,20 @@ main (int argc, char **argv)
     for (i = 1; i < argc; i++) {
         len = strlen(argv[i]);
         for (n = 0; n < len;) {
-            printf("'%s'\n", next_string(argv[i] + n, &offset).c_str());
+            list.push_back(next_string(argv[i] + n, &offset));
             n += n + offset;
         }
     }
+}
 
+int
+main (int argc, char **argv)
+{
+    std::vector<std::string> list;
+    int i;
+
+    parse_args(list, argc, argv);
+    for (i = 0; i < list.size(); i++)
+        printf("%s\n", list[i].c_str());
     return 0;
 }

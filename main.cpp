@@ -1,5 +1,6 @@
 #include <cstdlib>
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -14,6 +15,50 @@
  *  variable name is instantiated singularly. So, if trying to unify (?x foo)
  *  and (foo ?x) then ?x would be a single frame and its value is 'foo'.
  */
+
+enum DataType {
+    List,  /* A list of Data */
+    Atom,  /* An actual value: numbers, a string, etc. */
+    Var    /* A variable which can be assigned Data (which is just Data) */
+};
+
+/*
+ * A structure that can hold different types of data determined by DataType.
+ */
+struct Data {
+    DataType type;
+    void *data;
+
+    /*
+     * The internal, hardset values of strings and lists are returned as a copy
+     * and not a reference or pointer. But the values of Data frames can be set
+     * and reset and otherwise 'messed with' so returned pointers make sense.
+     * This all means that all core data needs to be allocated separately (if 
+     * at all, can just let c++ handle allocations and return addresses of 
+     * everything).
+     */
+
+    std::string
+    string () {
+        if (type != Atom)
+            return std::string();
+        return *(static_cast<std::string*>(data));
+    }
+
+    std::vector<Data*>
+    list () {
+        if (type != List)
+            return std::vector<Data*>();
+        return *(static_cast<std::vector<Data*>*>(data));
+    }
+
+    Data*
+    var () {
+        if (type != Var)
+            return NULL;
+        return static_cast<Data*>(data);
+    }
+};
 
 /*
  * Find the next whitespace delimited substring n the string given and set the
@@ -68,7 +113,7 @@ int
 main (int argc, char **argv)
 {
     std::vector<std::string> list;
-    int i;
+    unsigned int i;
 
     parse_args(list, argc, argv);
     for (i = 0; i < list.size(); i++)

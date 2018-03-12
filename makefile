@@ -1,2 +1,2 @@
 all:
-	g++ -Wall -std=c++98 -o unify main.cpp
+	g++ -g -Wall -std=c++98 -o unify main.cpp

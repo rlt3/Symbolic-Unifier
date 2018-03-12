@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cassert>
+#include <algorithm>
 #include <string>
 #include <vector>
 #include <list>
@@ -11,10 +12,6 @@
  *  - Come up with `Frame' data-structure which should hold the value for each
  *  variable. So, ?x foo ?y should have two frames (each being empty) and one
  *  value.
- *  - Make a function which parses out all of our substrings into variables or
- *  values.
- *  - Leverage C++ to not have new/delete except in List vector scenario. This
- *  means `vector' will need to be changed to a std::list.
  */
 
 void
@@ -107,7 +104,7 @@ public:
     }
 
     /*
-     * Set a variable's slot to some other variable.
+     * Set a variable's slot to some other Data (which could be any type).
      */
     void
     set (Data *data)
@@ -116,9 +113,6 @@ public:
         slot.data = data;
     }
 
-    /*
-     * Add a child to a given List.
-     */
     void
     add_child (Data *val)
     {
@@ -132,9 +126,13 @@ unify (Data *a, Data *b)
 {
     unsigned int i;
 
+    if (a->list().size() != b->list().size())
+        exit_error("Patterns must be of same length");
+
     for (i = 0; i < a->list().size(); i++) {
-        printf("%s %s\n", a->list()[i]->name().c_str(),
-                          b->list()[i]->name().c_str());
+        printf("%s %s == %d\n", a->list()[i]->name().c_str(),
+                          b->list()[i]->name().c_str(),
+                          (a->list()[i]->name() == b->list()[i]->name()));
     }
 
     /*
@@ -178,6 +176,21 @@ next_string (std::string str, int *offset)
 }
 
 /*
+ * Add only non-existing strings to the list. Returns a pointer to an existing
+ * string if `str' is in the list.
+ */
+std::string *
+intern_string (std::list<std::string> &intern, std::string str)
+{
+    std::list<std::string>::iterator it;
+    it = std::find(intern.begin(), intern.end(), str);
+    if (it != intern.end())
+        return &(*it);
+    intern.push_back(str);
+    return &intern.back();
+}
+
+/*
  * Parse whitespace-delimited arguments (including those passed as quoted
  * strings) and push them into the list given by reference.
  */
@@ -193,6 +206,7 @@ parse_args (std::list<std::vector<Data*> > &intern_lst,
     int n;      /* position of substring in argv[i] */
     int len;    /* maximum length of argv[i] string */
     int offset; /* total number of bytes to advance n for next substring */
+    std::string *s;
 
     for (i = 1; i < argc; i++) {
         len = strlen(argv[i]);
@@ -212,13 +226,13 @@ parse_args (std::list<std::vector<Data*> > &intern_lst,
              * to add to the Data which is created as a new instance as well.
              */
 
-            /* TODO: only intern not existing strings */
-            intern_str.push_back(next_string(argv[i] + n, &offset));
+            s = intern_string(intern_str, next_string(argv[i] + n, &offset));
 
-            if (intern_str.back()[0] == '?')
-                intern_dat.push_back(Data(Var, &intern_str.back()));
+            assert(!s->empty());
+            if ((*s)[0] == '?')
+                intern_dat.push_back(Data(Var, s));
             else
-                intern_dat.push_back(Data(Atom, &intern_str.back(), &intern_str.back()));
+                intern_dat.push_back(Data(Atom, s, s));
             patterns.back()->add_child(&intern_dat.back());
 
             n = n + offset;

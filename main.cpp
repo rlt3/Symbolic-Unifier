@@ -1,6 +1,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <cassert>
 #include <string>
 #include <vector>
 #include <list>
@@ -33,110 +34,108 @@ enum DataType {
  * A structure that can hold different types of data determined by DataType.
  */
 struct Data {
-    DataType type;
-    void *data;
+private:
+    DataType datatype;
+    std::string *representation;
+    union {
+        Data *data;
+        std::string *string;
+        std::vector<Data*> *list;
+    } slot;
+
+public:
+    Data (DataType type, std::string *name)
+        : datatype(type)
+        , representation(name)
+    {
+        assert(datatype == Var);
+        slot.data = NULL;
+    }
+
+    Data (DataType type, std::string *name, std::string *val)
+        : datatype(type)
+        , representation(name)
+    {
+        assert(datatype == Atom);
+        slot.string = val;
+    }
+
+    Data (DataType type, std::vector<Data*> *val)
+        : datatype(type)
+        , representation(NULL)
+    {
+        assert(datatype == List);
+        slot.list = val;
+    }
+
+    DataType
+    type ()
+    {
+        return datatype;
+    }
+
+    const std::string&
+    name ()
+    {
+        assert(datatype != List);
+        return *representation;
+    }
 
     /*
-     * TODO: To avoid any problems with erasure here, make it impossible to set
-     * `type' except through the constructor and also have `data' passed
-     * through the constructor. We can guard the `getters` in the normal way
-     * to protect against programmer errors but have a more stable situation
-     * in C++'s environment.
+     * Get the value of the data determined by its type.
      */
 
-    Data (const Data &d)
-        : type(d.type)
-        , data(d.data)
-    { }
-
-    Data (DataType type)
-        : type(type)
-        , data(NULL)
-    {
-        if (type == List)
-            data = (void*) new std::vector<Data*>;
-    }
-
-    ~Data ()
-    {
-        std::vector<Data*>* list;
-        unsigned int i;
-
-        if (type == List) {
-            list = static_cast<std::vector<Data*>*>(data);
-            for (i = 0; i < list->size(); i++)
-                delete (*list)[i];
-            delete list;
-        }
-    }
-
-    std::string
+    const std::string&
     string ()
     {
-        if (type != Atom)
-            exit_error("Cannot get `string' from non-Atom type");
-        if (!data)
-            exit_error("Cannot get `string' from NULL data");
-        return *(static_cast<std::string*>(data));
+        assert(datatype == Atom);
+        return *slot.string;
     }
 
-    std::vector<Data*>
+    const std::vector<Data*>&
     list ()
     {
-        if (type != List)
-            exit_error("Cannot get `list' from non-List type");
-        return *(static_cast<std::vector<Data*>*>(data));
+        assert(datatype == List);
+        return *slot.list;
     }
 
     Data*
     var ()
     {
-        if (type != Var)
-            exit_error("Cannot get `var' from non-Var type");
-        if (!data)
-            exit_error("Cannot get `var' from NULL data");
-        return static_cast<Data*>(data);
+        assert(datatype == Var);
+        return slot.data;
     }
 
+    /*
+     * Set a variable's slot to some other variable.
+     */
+    void
+    set (Data *data)
+    {
+        assert(datatype == Var);
+        slot.data = data;
+    }
+
+    /*
+     * Add a child to a given List.
+     */
     void
     add_child (Data *val)
     {
-        if (type != List)
-            exit_error("Cannot add_child to non-List type");
-        static_cast<std::vector<Data*>*>(data)->push_back(val);
-    }
-
-    void
-    set (Data *val)
-    {
-        if (type != Var)
-            exit_error("Cannot set `Data` to non-Var type");
-        data = static_cast<void*>(val);
-    }
-
-    void
-    set (std::string &val)
-    {
-        if (type != Atom)
-            exit_error("Cannot set `string` to non-Atom type");
-        data = static_cast<void*>(&val);
+        assert(datatype == List);
+        slot.list->push_back(val);
     }
 };
 
 void
 unify (Data *a, Data *b)
 {
-    std::vector<Data*> children;
     unsigned int i;
 
-    children = a->list();
-    for (i = 0; i < children.size(); i++)
-        printf("%s\n", children[i]->string().c_str());
-    printf("\n");
-
-    children = b->list();
-    for (i = 0; i < children.size(); i++)
-        printf("%s\n", children[i]->string().c_str());
+    for (i = 0; i < a->list().size(); i++) {
+        printf("%s %s\n", a->list()[i]->name().c_str(),
+                          b->list()[i]->name().c_str());
+    }
 
     /*
      * 1. Get a[i] and b[i].
@@ -183,7 +182,9 @@ next_string (std::string str, int *offset)
  * strings) and push them into the list given by reference.
  */
 void
-parse_args (std::list<std::string> &interned,
+parse_args (std::list<std::vector<Data*> > &intern_lst,
+            std::list<std::string> &intern_str,
+            std::list<Data> &intern_dat,
             std::vector<Data*> &patterns,
             int argc,
             char **argv)
@@ -192,25 +193,33 @@ parse_args (std::list<std::string> &interned,
     int n;      /* position of substring in argv[i] */
     int len;    /* maximum length of argv[i] string */
     int offset; /* total number of bytes to advance n for next substring */
-    Data *parent, *child;
 
     for (i = 1; i < argc; i++) {
         len = strlen(argv[i]);
 
-        /* for each string, it is a new list */
-        parent = new Data(List);
-        patterns.push_back(parent);
+        /* 
+         * A bit of indirection. We create new instances of a Vector and Data
+         * by adding them to the list. Then we get the address of those to use
+         * for handling the individual pieces of data.
+         */
+        intern_lst.push_back(std::vector<Data*>());
+        intern_dat.push_back(Data(List, &intern_lst.back()));
+        patterns.push_back(&intern_dat.back());
 
         for (n = 0; n < len;) {
-            /* the string's only owner is `interned' */
-            /* TODO: only intern not existing strings */
-            interned.push_back(next_string(argv[i] + n, &offset));
+            /*
+             * We do the same here as above. Create a new instance for a string
+             * to add to the Data which is created as a new instance as well.
+             */
 
-            /* make new Atomic Data using string as data */
-            /* TODO: if str[0] is ? then it is a variable */
-            child = new Data(Atom);
-            child->set(interned.back());
-            parent->add_child(child);
+            /* TODO: only intern not existing strings */
+            intern_str.push_back(next_string(argv[i] + n, &offset));
+
+            if (intern_str.back()[0] == '?')
+                intern_dat.push_back(Data(Var, &intern_str.back()));
+            else
+                intern_dat.push_back(Data(Atom, &intern_str.back(), &intern_str.back()));
+            patterns.back()->add_child(&intern_dat.back());
 
             n = n + offset;
         }
@@ -221,22 +230,21 @@ int
 main (int argc, char **argv)
 {
     /*
-     * A vector cannot guarantee valid pointers to strings if more strings are
-     * inserted. We use a list instead so we can have strings in single place.
+     * These lists hold our data in a single place that can be referenced 
+     * safely by pointers throughout insertion and deletion. This lets our Data
+     * use pointers without having to worry about pointer corruption.
      */
-    std::list<std::string> interned;
+    std::list<std::vector<Data*> > intern_lst;
+    std::list<std::string> intern_str;
+    std::list<Data> intern_dat;
     std::vector<Data*> patterns;
-    unsigned int i;
 
-    parse_args(interned, patterns, argc, argv);
+    parse_args(intern_lst, intern_str, intern_dat, patterns, argc, argv);
 
     if (patterns.size() < 2)
         exit_error("Must have at least 2 patterns to test");
 
     unify(patterns[0], patterns[1]);
-
-    for (i = 0; i < patterns.size(); i++)
-        delete patterns[i];
 
     return 0;
 }

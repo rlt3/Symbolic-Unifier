@@ -22,6 +22,7 @@ exit_error (std::string err)
 }
 
 enum DataType {
+    Nil,
     List,  /* A list of Data */
     Atom,  /* An actual value: numbers, a string, etc. */
     Var    /* A variable which can be assigned Data (which is just Data) */
@@ -41,25 +42,25 @@ private:
     } slot;
 
 public:
-    Data (DataType type, std::string *name)
+    Data (DataType type, std::string *name, Data* val)
         : datatype(type)
         , representation(name)
     {
         assert(datatype == Var);
-        slot.data = NULL;
+        slot.data = val;
     }
 
     Data (DataType type, std::string *name, std::string *val)
         : datatype(type)
         , representation(name)
     {
-        assert(datatype == Atom);
+        assert(datatype == Atom || datatype == Nil);
         slot.string = val;
     }
 
-    Data (DataType type, std::vector<Data*> *val)
+    Data (DataType type, std::string *name, std::vector<Data*> *val)
         : datatype(type)
-        , representation(NULL)
+        , representation(name)
     {
         assert(datatype == List);
         slot.list = val;
@@ -69,6 +70,23 @@ public:
     type ()
     {
         return datatype;
+    }
+
+    std::string
+    typestr ()
+    {
+        switch (datatype) {
+        case List:
+            return "List";
+        case Var:
+            return "Var";
+        case Nil:
+            return "Nil";
+        case Atom:
+            return "Atom";
+        default:
+            assert(0);
+        }
     }
 
     const std::string&
@@ -121,18 +139,34 @@ public:
     }
 };
 
-void
-unify (Data *a, Data *b)
+Data *
+value (Data *d)
 {
+    if (d->type() == List || d->type() == Atom)
+        return d;
+
+    while (d->type() == Var)
+        d = d->var();
+    return d;
+}
+
+void
+unify (Data *alist, Data *blist)
+{
+    Data *a, *b;
     unsigned int i;
 
-    if (a->list().size() != b->list().size())
+    if (alist->list().size() != blist->list().size())
         exit_error("Patterns must be of same length");
 
-    for (i = 0; i < a->list().size(); i++) {
-        printf("%s %s == %d\n", a->list()[i]->name().c_str(),
-                          b->list()[i]->name().c_str(),
-                          (a->list()[i]->name() == b->list()[i]->name()));
+    for (i = 0; i < alist->list().size(); i++) {
+        a = alist->list()[i];
+        b = blist->list()[i];
+        printf("%s (%p) == %s\n", 
+                a->name().c_str(), a, value(a)->name().c_str());
+        printf("%s (%p) == %s\n", 
+                b->name().c_str(), b, value(b)->name().c_str());
+        printf("\n");
     }
 
     /*
@@ -190,6 +224,53 @@ intern_string (std::list<std::string> &intern, std::string str)
     return &intern.back();
 }
 
+Data *nulldata = NULL;
+
+Data *
+intern_data (std::list<std::vector<Data*> > &intern_lst,
+             std::list<std::string> &intern_str,
+             std::list<Data> &intern_dat,
+             DataType type,
+             std::string name)
+{
+    std::string *str = intern_string(intern_str, name);
+
+    switch (type) {
+    case List:
+        intern_lst.push_back(std::vector<Data*>());
+        intern_dat.push_back(Data(List, str, &intern_lst.back()));
+        break;
+
+    case Var:
+        assert(nulldata);
+        intern_dat.push_back(Data(Var, str, nulldata));
+        break;
+
+    case Atom:
+        intern_dat.push_back(Data(Atom, str, str));
+        break;
+
+    case Nil:
+        intern_dat.push_back(Data(Nil, str, str));
+        break;
+
+    default:
+        assert(type == Nil);
+    }
+
+    return &intern_dat.back();
+}
+
+Data *
+intern_list (std::list<std::vector<Data*> > &lst,
+             std::list<std::string> &str,
+             std::list<Data> &dat)
+{
+    static int i = 0;
+    static std::string l("list:");
+    return intern_data(lst, str, dat, List, l + std::to_string(i++));
+}
+
 /*
  * Parse whitespace-delimited arguments (including those passed as quoted
  * strings) and push them into the list given by reference.
@@ -206,7 +287,8 @@ parse_args (std::list<std::vector<Data*> > &intern_lst,
     int n;      /* position of substring in argv[i] */
     int len;    /* maximum length of argv[i] string */
     int offset; /* total number of bytes to advance n for next substring */
-    std::string *s;
+    std::string name;
+    Data *parent, *child;
 
     for (i = 1; i < argc; i++) {
         len = strlen(argv[i]);
@@ -216,9 +298,8 @@ parse_args (std::list<std::vector<Data*> > &intern_lst,
          * by adding them to the list. Then we get the address of those to use
          * for handling the individual pieces of data.
          */
-        intern_lst.push_back(std::vector<Data*>());
-        intern_dat.push_back(Data(List, &intern_lst.back()));
-        patterns.push_back(&intern_dat.back());
+        parent = intern_list(intern_lst, intern_str, intern_dat);
+        patterns.push_back(parent);
 
         for (n = 0; n < len;) {
             /*
@@ -226,14 +307,13 @@ parse_args (std::list<std::vector<Data*> > &intern_lst,
              * to add to the Data which is created as a new instance as well.
              */
 
-            s = intern_string(intern_str, next_string(argv[i] + n, &offset));
-
-            assert(!s->empty());
-            if ((*s)[0] == '?')
-                intern_dat.push_back(Data(Var, s));
+            name = next_string(argv[i] + n, &offset);
+            assert(!name.empty());
+            if (name[0] == '?')
+                child = intern_data(intern_lst, intern_str, intern_dat, Var, name);
             else
-                intern_dat.push_back(Data(Atom, s, s));
-            patterns.back()->add_child(&intern_dat.back());
+                child = intern_data(intern_lst, intern_str, intern_dat, Atom, name);
+            parent->add_child(child);
 
             n = n + offset;
         }
@@ -253,6 +333,7 @@ main (int argc, char **argv)
     std::list<Data> intern_dat;
     std::vector<Data*> patterns;
 
+    nulldata = intern_data(intern_lst, intern_str, intern_dat, Nil, "nil");
     parse_args(intern_lst, intern_str, intern_dat, patterns, argc, argv);
 
     if (patterns.size() < 2)

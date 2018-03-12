@@ -137,6 +137,17 @@ unify (Data *a, Data *b)
     children = b->list();
     for (i = 0; i < children.size(); i++)
         printf("%s\n", children[i]->string().c_str());
+
+    /*
+     * 1. Get a[i] and b[i].
+     * 2. if a[i] is a var and b[i] is a list, if a[i] appears in b[i], error
+     *    this is recursive.
+     * 3. Do the same as 2, except switch b and a.
+     * 4. Set a[i] = b[i].
+     * 5. Set b[i] = a[i]. Useful for ?x = ?y type scenarios.
+     * 6. Test equality of a[i] and b[i] if they are atoms. If they aren't the
+     *    same then we have a simple erroneous assertion: 1 == 2.
+     */
 }
 
 /*

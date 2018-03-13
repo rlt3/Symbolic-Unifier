@@ -2,10 +2,21 @@
 #include <cstdio>
 #include <cstring>
 #include <cassert>
+#include <cctype>
 #include <algorithm>
 #include <string>
+#include <sstream>
 #include <vector>
 #include <list>
+
+template <typename T>
+std::string
+to_string (T val)
+{
+    std::stringstream stream;
+    stream << val;
+    return stream.str();
+}
 
 /*
  * TODO:
@@ -194,13 +205,13 @@ next_string (std::string str, int *offset)
 
     /* Skip all whitespace */
     skip = 0;
-    while (skip < length && str[skip] == ' ')
+    while (skip < length && isspace(str[skip]))
         skip++;
 
     /* Find pos of next whitespace or '\0' */
     pos = 0;
     while (skip + pos < length) {
-        if (str[skip + pos] == ' ')
+        if (isspace(str[skip + pos]))
             break;
         pos++;
     }
@@ -268,7 +279,7 @@ intern_list (std::list<std::vector<Data*> > &lst,
 {
     static int i = 0;
     static std::string l("list:");
-    return intern_data(lst, str, dat, List, l + std::to_string(i++));
+    return intern_data(lst, str, dat, List, l + to_string(i++));
 }
 
 /*

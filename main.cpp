@@ -8,6 +8,7 @@
 #include <sstream>
 #include <vector>
 #include <list>
+#include <map>
 
 template <typename T>
 std::string
@@ -42,7 +43,7 @@ enum DataType {
 /*
  * A structure that can hold different types of data determined by DataType.
  */
-struct Data {
+class Data {
 private:
     DataType datatype;
     std::string *representation;
@@ -150,6 +151,95 @@ public:
     }
 };
 
+/*
+ * Handle all the allocations of all parts of Data including strings and lists.
+ */
+class Intern {
+public:
+    Intern ()
+    {
+        nulldata = this->data(Nil, "nil");
+    }
+
+    Data *
+    atom (std::string name)
+    {
+        return this->data(Atom, name);
+    }
+
+    Data *
+    list ()
+    {
+        /* Each list has a unique name */
+        static std::string name("list:");
+        static int i = 0;
+        return this->data(List, name + to_string(i++));
+    }
+
+    Data *
+    var (std::string name)
+    {
+        return this->data(Var, name);
+    }
+
+protected:
+    std::string*
+    string (std::string str)
+    {
+        std::list<std::string>::iterator it;
+        it = std::find(strings.begin(), strings.end(), str);
+        if (it != strings.end())
+            return &(*it);
+        strings.push_back(str);
+        return &strings.back();
+    }
+
+    Data *
+    data (DataType type, std::string str)
+    {
+        std::map<std::string*, Data*>::iterator it;
+        std::string *name = this->string(str);
+
+        /* Find the data if it already exists (same name) */
+        it = mappings.find(name);
+        if (it != mappings.end())
+            return it->second;
+
+        switch (type) {
+        case List:
+            lists.push_back(std::vector<Data*>());
+            datums.push_back(Data(type, name, &lists.back()));
+            break;
+
+        case Var:
+            datums.push_back(Data(type, name, this->nulldata));
+            break;
+
+        case Atom:
+            datums.push_back(Data(type, name, name));
+            break;
+
+        case Nil:
+            datums.push_back(Data(type, name, name));
+            break;
+
+        default:
+            assert(type == Nil);
+            break;
+        }
+
+        mappings.insert(std::pair<std::string*, Data*>(name, &datums.back()));
+        return &datums.back();
+    }
+
+private:
+    std::list<std::vector<Data*> > lists;
+    std::list<std::string> strings;
+    std::list<Data> datums;
+    std::map<std::string*, Data*> mappings;
+    Data *nulldata;
+};
+
 Data *
 value (Data *d)
 {
@@ -221,78 +311,11 @@ next_string (std::string str, int *offset)
 }
 
 /*
- * Add only non-existing strings to the list. Returns a pointer to an existing
- * string if `str' is in the list.
- */
-std::string *
-intern_string (std::list<std::string> &intern, std::string str)
-{
-    std::list<std::string>::iterator it;
-    it = std::find(intern.begin(), intern.end(), str);
-    if (it != intern.end())
-        return &(*it);
-    intern.push_back(str);
-    return &intern.back();
-}
-
-Data *nulldata = NULL;
-
-Data *
-intern_data (std::list<std::vector<Data*> > &intern_lst,
-             std::list<std::string> &intern_str,
-             std::list<Data> &intern_dat,
-             DataType type,
-             std::string name)
-{
-    std::string *str = intern_string(intern_str, name);
-
-    switch (type) {
-    case List:
-        intern_lst.push_back(std::vector<Data*>());
-        intern_dat.push_back(Data(List, str, &intern_lst.back()));
-        break;
-
-    case Var:
-        assert(nulldata);
-        intern_dat.push_back(Data(Var, str, nulldata));
-        break;
-
-    case Atom:
-        intern_dat.push_back(Data(Atom, str, str));
-        break;
-
-    case Nil:
-        intern_dat.push_back(Data(Nil, str, str));
-        break;
-
-    default:
-        assert(type == Nil);
-    }
-
-    return &intern_dat.back();
-}
-
-Data *
-intern_list (std::list<std::vector<Data*> > &lst,
-             std::list<std::string> &str,
-             std::list<Data> &dat)
-{
-    static int i = 0;
-    static std::string l("list:");
-    return intern_data(lst, str, dat, List, l + to_string(i++));
-}
-
-/*
  * Parse whitespace-delimited arguments (including those passed as quoted
  * strings) and push them into the list given by reference.
  */
 void
-parse_args (std::list<std::vector<Data*> > &intern_lst,
-            std::list<std::string> &intern_str,
-            std::list<Data> &intern_dat,
-            std::vector<Data*> &patterns,
-            int argc,
-            char **argv)
+parse_args (Intern &intern, std::vector<Data*> &patterns, int argc, char **argv)
 {
     int i;      /* argv index */
     int n;      /* position of substring in argv[i] */
@@ -303,29 +326,17 @@ parse_args (std::list<std::vector<Data*> > &intern_lst,
 
     for (i = 1; i < argc; i++) {
         len = strlen(argv[i]);
-
-        /* 
-         * A bit of indirection. We create new instances of a Vector and Data
-         * by adding them to the list. Then we get the address of those to use
-         * for handling the individual pieces of data.
-         */
-        parent = intern_list(intern_lst, intern_str, intern_dat);
+        parent = intern.list();
         patterns.push_back(parent);
 
         for (n = 0; n < len;) {
-            /*
-             * We do the same here as above. Create a new instance for a string
-             * to add to the Data which is created as a new instance as well.
-             */
-
             name = next_string(argv[i] + n, &offset);
             assert(!name.empty());
             if (name[0] == '?')
-                child = intern_data(intern_lst, intern_str, intern_dat, Var, name);
+                child = intern.var(name);
             else
-                child = intern_data(intern_lst, intern_str, intern_dat, Atom, name);
+                child = intern.atom(name);
             parent->add_child(child);
-
             n = n + offset;
         }
     }
@@ -334,18 +345,10 @@ parse_args (std::list<std::vector<Data*> > &intern_lst,
 int
 main (int argc, char **argv)
 {
-    /*
-     * These lists hold our data in a single place that can be referenced 
-     * safely by pointers throughout insertion and deletion. This lets our Data
-     * use pointers without having to worry about pointer corruption.
-     */
-    std::list<std::vector<Data*> > intern_lst;
-    std::list<std::string> intern_str;
-    std::list<Data> intern_dat;
+    Intern intern;
     std::vector<Data*> patterns;
 
-    nulldata = intern_data(intern_lst, intern_str, intern_dat, Nil, "nil");
-    parse_args(intern_lst, intern_str, intern_dat, patterns, argc, argv);
+    parse_args(intern, patterns, argc, argv);
 
     if (patterns.size() < 2)
         exit_error("Must have at least 2 patterns to test");

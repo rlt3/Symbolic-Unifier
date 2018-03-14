@@ -240,48 +240,6 @@ private:
     Data *nulldata;
 };
 
-Data *
-value (Data *d)
-{
-    if (d->type() == List || d->type() == Atom)
-        return d;
-
-    while (d->type() == Var)
-        d = d->var();
-    return d;
-}
-
-void
-unify (Data *alist, Data *blist)
-{
-    Data *a, *b;
-    unsigned int i;
-
-    if (alist->list().size() != blist->list().size())
-        exit_error("Patterns must be of same length");
-
-    for (i = 0; i < alist->list().size(); i++) {
-        a = alist->list()[i];
-        b = blist->list()[i];
-        printf("%s (%p) == %s\n", 
-                a->name().c_str(), a, value(a)->name().c_str());
-        printf("%s (%p) == %s\n", 
-                b->name().c_str(), b, value(b)->name().c_str());
-        printf("\n");
-    }
-
-    /*
-     * 1. Get a[i] and b[i].
-     * 2. if a[i] is a var and b[i] is a list, if a[i] appears in b[i], error
-     *    this is recursive.
-     * 3. Do the same as 2, except switch b and a.
-     * 4. Set a[i] = b[i].
-     * 5. Set b[i] = a[i]. Useful for ?x = ?y type scenarios.
-     * 6. Test equality of a[i] and b[i] if they are atoms. If they aren't the
-     *    same then we have a simple erroneous assertion: 1 == 2.
-     */
-}
-
 /*
  * Find the next whitespace delimited substring n the string given and set the
  * offset of the beginning of the next potential variable.
@@ -341,6 +299,61 @@ parse_args (Intern &intern, std::vector<Data*> &patterns, int argc, char **argv)
         }
     }
 }
+
+Data *
+value (Data *d)
+{
+    if (d->type() == List || d->type() == Atom)
+        return d;
+
+    while (d->type() == Var)
+        d = d->var();
+    return d;
+}
+
+void
+extend (Data *a, Data *b)
+{
+    /* if the pointers are the same, they are the same Data object */
+    if (a == b)
+        return;
+
+    /* if `b` is a list and has `a' inside of it */
+    //if (depends_on(b, a))
+    //  exit_failure("%s and %s have a circular definition", a->name(), b->name());
+}
+
+void
+unify (Data *alist, Data *blist)
+{
+    Data *a, *b;
+    unsigned int i;
+
+    if (alist->list().size() != blist->list().size())
+        exit_error("Patterns must be of same length");
+
+    for (i = 0; i < alist->list().size(); i++) {
+        a = alist->list()[i];
+        b = blist->list()[i];
+        printf("%s (%p) == %s\n", 
+                a->name().c_str(), a, value(a)->name().c_str());
+        printf("%s (%p) == %s\n", 
+                b->name().c_str(), b, value(b)->name().c_str());
+        printf("\n");
+    }
+
+    /*
+     * 1. Get a[i] and b[i].
+     * 2. if a[i] is a var and b[i] is a list, if a[i] appears in b[i], error
+     *    this is recursive.
+     * 3. Do the same as 2, except switch b and a.
+     * 4. Set a[i] = b[i].
+     * 5. Set b[i] = a[i]. Useful for ?x = ?y type scenarios.
+     * 6. Test equality of a[i] and b[i] if they are atoms. If they aren't the
+     *    same then we have a simple erroneous assertion: 1 == 2.
+     */
+}
+
 
 int
 main (int argc, char **argv)

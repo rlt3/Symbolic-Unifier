@@ -3,6 +3,7 @@
 #include <cstring>
 #include <cassert>
 #include <cctype>
+#include <cstdarg>
 #include <algorithm>
 #include <string>
 #include <sstream>
@@ -27,9 +28,13 @@ to_string (T val)
  */
 
 void
-exit_error (std::string err)
+error (const char *format, ...)
 {
-    fprintf(stderr, "%s\n", err.c_str());
+    va_list args;
+    va_start(args, format);
+    vfprintf(stderr, format, args);
+    va_end(args);
+    putc('\n', stderr);
     exit(1);
 }
 
@@ -101,22 +106,21 @@ public:
         }
     }
 
-    const std::string&
+    const char *
     name ()
     {
-        assert(datatype != List);
-        return *representation;
+        return representation->c_str();
     }
 
     /*
      * Get the value of the data determined by its type.
      */
 
-    const std::string&
-    string ()
+    const char *
+    value ()
     {
         assert(datatype == Atom);
-        return *slot.string;
+        return slot.string->c_str();
     }
 
     const std::vector<Data*>&
@@ -314,13 +318,30 @@ value (Data *d)
 void
 extend (Data *a, Data *b)
 {
+    printf("%s (%p) == %s\n", a->name(), a, value(a)->name());
+
     /* if the pointers are the same, they are the same Data object */
     if (a == b)
         return;
 
-    /* if `b` is a list and has `a' inside of it */
-    //if (depends_on(b, a))
-    //  exit_failure("%s and %s have a circular definition", a->name(), b->name());
+    /* cannot assign values to these types. They are constant */
+    if (a->type() == List)
+        return;
+    if (a->type() == Atom)
+        return;
+
+/* if `b` is a list and has `a' inside of it */
+//if (depends_on(b, a))
+//  exit_failure("%s and %s have a circular definition", a->name(), b->name());
+
+    if (a->type() == Atom && b->type() == Atom)
+        error("Cannot assign '%s' to '%s'", a->value(), b->value());
+
+    /* 
+     * TODO: Need to set variable of variable. E.g. ?x = ?y, then if ?x is set
+     * to 5, that actually means ?y is set to 5 as well. They are linked.
+     */
+    a->set(b);
 }
 
 void
@@ -330,16 +351,13 @@ unify (Data *alist, Data *blist)
     unsigned int i;
 
     if (alist->list().size() != blist->list().size())
-        exit_error("Patterns must be of same length");
+        error("Patterns must be of same length");
 
     for (i = 0; i < alist->list().size(); i++) {
         a = alist->list()[i];
         b = blist->list()[i];
-        printf("%s (%p) == %s\n", 
-                a->name().c_str(), a, value(a)->name().c_str());
-        printf("%s (%p) == %s\n", 
-                b->name().c_str(), b, value(b)->name().c_str());
-        printf("\n");
+        extend(a, b);
+        extend(b, a);
     }
 
     /*
@@ -364,9 +382,20 @@ main (int argc, char **argv)
     parse_args(intern, patterns, argc, argv);
 
     if (patterns.size() < 2)
-        exit_error("Must have at least 2 patterns to test");
+        error("Must have at least 2 patterns to test");
 
     unify(patterns[0], patterns[1]);
+
+    unsigned int i, k;
+    for (k = 0; k < patterns.size(); k++) {
+        printf("\n");
+        for (i = 0; i < patterns[k]->list().size(); i++) {
+            printf("%s (%p) == %s\n", 
+                        patterns[k]->list()[i]->name(),
+                        patterns[k]->list()[i],
+                        value(patterns[k]->list()[i])->value());
+        }
+    }
 
     return 0;
 }

@@ -330,6 +330,12 @@ extend (Data *a, Data *b)
     if (a->type() == Atom)
         return;
 
+    /*
+     * TODO: Need to work on value of variable as it is defined in `set'. So, 
+     * if ?x = ?y and ?y = 5 that means ?x isn't a variable anymore but an 
+     * atomic value.
+     */
+
 /* if `b` is a list and has `a' inside of it */
 //if (depends_on(b, a))
 //  exit_failure("%s and %s have a circular definition", a->name(), b->name());

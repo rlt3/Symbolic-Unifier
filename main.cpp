@@ -89,10 +89,11 @@ public:
         return datatype;
     }
 
-    std::string
-    typestr ()
+    static
+    const char *
+    typestr (DataType type)
     {
-        switch (datatype) {
+        switch (type) {
         case List:
             return "List";
         case Var:
@@ -119,8 +120,10 @@ public:
     const char *
     value ()
     {
-        assert(datatype == Atom);
-        return slot.string->c_str();
+        if (datatype == Atom)
+            return slot.string->c_str();
+        else
+            return this->name();
     }
 
     const std::vector<Data*>&
@@ -139,7 +142,21 @@ public:
 
     /*
      * Set a variable's slot to some other Data (which could be any type).
+     * Link a variable to some other Data. If that linked Data is a variable,
+     * e.g. ?x = ?y, then linking will occur on that linked variable. E.g. ?x
+     * = ?y and ?x = 5, then ?y = 5.
      */
+    void
+    link (Data *data)
+    {
+        assert(datatype == Var);
+        Data *d = this;
+        /* while the next link is not Nil */
+        while (d->var()->type() != Nil)
+            d = d->var();
+        d->set(data);
+    }
+
     void
     set (Data *data)
     {
@@ -307,6 +324,9 @@ parse_args (Intern &intern, std::vector<Data*> &patterns, int argc, char **argv)
 Data *
 value (Data *d)
 {
+    /*
+     * TODO: Some way to cleanly lookup unifications made to variables
+     */
     if (d->type() == List || d->type() == Atom)
         return d;
 
@@ -316,68 +336,65 @@ value (Data *d)
 }
 
 void
+unify (Data *a, Data *b);
+
+void
 extend (Data *a, Data *b)
 {
-    printf("%s (%p) == %s\n", a->name(), a, value(a)->name());
+    assert(a->type() == Var);
 
-    /* if the pointers are the same, they are the same Data object */
-    if (a == b)
-        return;
-
-    /* cannot assign values to these types. They are constant */
-    if (a->type() == List)
-        return;
-    if (a->type() == Atom)
-        return;
-
-    /*
-     * TODO: Need to work on value of variable as it is defined in `set'. So, 
-     * if ?x = ?y and ?y = 5 that means ?x isn't a variable anymore but an 
-     * atomic value.
-     */
-
-/* if `b` is a list and has `a' inside of it */
-//if (depends_on(b, a))
-//  exit_failure("%s and %s have a circular definition", a->name(), b->name());
-
-    if (a->type() == Atom && b->type() == Atom)
-        error("Cannot assign '%s' to '%s'", a->value(), b->value());
-
+    /* if `a' has a value, unify with that linked value */
+    if (a->var()->type() != Nil) {
+        unify(a->var(), b);
+    }
     /* 
-     * TODO: Need to set variable of variable. E.g. ?x = ?y, then if ?x is set
-     * to 5, that actually means ?y is set to 5 as well. They are linked.
+     * Do the same for `b' if it is a Var. We do this here because we skip the
+     * extend on `b' in `unify' implicitly using chained if/elseif statements.
      */
-    a->set(b);
+    else if (b->type() == Var) {
+        if (b->var()->type() != Nil)
+            unify(a, b->var());
+        else
+            a->set(b);
+    }
+    /* else it's simply a variable and an atom, e.g. ?x = 5 */
+    else {
+        a->set(b);
+    }
 }
 
 void
-unify (Data *alist, Data *blist)
+unify (Data *a, Data *b)
 {
-    Data *a, *b;
     unsigned int i;
 
-    if (alist->list().size() != blist->list().size())
-        error("Patterns must be of same length");
+    /* the two data objects are the same object, e.g. ?x = ?x or 5 = 5 */
+    if (a == b) {
+        return;
+    }
 
-    for (i = 0; i < alist->list().size(); i++) {
-        a = alist->list()[i];
-        b = blist->list()[i];
+    /* check for Vars on each side, but only set left side if both are Vars */
+    else if (a->type() == Var) {
         extend(a, b);
+    }
+    else if (b->type() == Var) {
         extend(b, a);
     }
 
-    /*
-     * 1. Get a[i] and b[i].
-     * 2. if a[i] is a var and b[i] is a list, if a[i] appears in b[i], error
-     *    this is recursive.
-     * 3. Do the same as 2, except switch b and a.
-     * 4. Set a[i] = b[i].
-     * 5. Set b[i] = a[i]. Useful for ?x = ?y type scenarios.
-     * 6. Test equality of a[i] and b[i] if they are atoms. If they aren't the
-     *    same then we have a simple erroneous assertion: 1 == 2.
-     */
-}
+    /* when given two patterns to unify */
+    else if (a->type() == List && b->type() == List) {
+        if (a->list().size() != b->list().size())
+            error("Patterns must be of same length");
 
+        for (i = 0; i < a->list().size(); i++)
+            unify(a->list()[i], b->list()[i]);
+    }
+
+    else {
+        error("Cannot unify data of types %s and %s\n", 
+                Data::typestr(a->type()), Data::typestr(b->type()));
+    }
+}
 
 int
 main (int argc, char **argv)

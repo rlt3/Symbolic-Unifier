@@ -11,22 +11,6 @@
 #include <list>
 #include <map>
 
-template <typename T>
-std::string
-to_string (T val)
-{
-    std::stringstream stream;
-    stream << val;
-    return stream.str();
-}
-
-/*
- * TODO:
- *  - Come up with `Frame' data-structure which should hold the value for each
- *  variable. So, ?x foo ?y should have two frames (each being empty) and one
- *  value.
- */
-
 void
 error (const char *format, ...)
 {
@@ -170,12 +154,10 @@ public:
     }
 
     Data *
-    list ()
+    list (std::string name)
     {
-        /* Each list has a unique name */
-        static std::string name("list:");
-        static int i = 0;
-        return this->data(List, name + to_string(i++));
+        /* TODO: same patterns (lists) will have same name */
+        return this->data(List, name);
     }
 
     Data *
@@ -286,7 +268,7 @@ parse_args (Intern &intern, std::vector<Data*> &patterns, int argc, char **argv)
 
     for (i = 1; i < argc; i++) {
         len = strlen(argv[i]);
-        parent = intern.list();
+        parent = intern.list(argv[i]);
         patterns.push_back(parent);
 
         for (n = 0; n < len;) {

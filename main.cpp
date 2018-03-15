@@ -117,15 +117,6 @@ public:
      * Get the value of the data determined by its type.
      */
 
-    const char *
-    value ()
-    {
-        if (datatype == Atom)
-            return slot.string->c_str();
-        else
-            return this->name();
-    }
-
     const std::vector<Data*>&
     list ()
     {
@@ -140,21 +131,11 @@ public:
         return slot.data;
     }
 
-    /*
-     * Set a variable's slot to some other Data (which could be any type).
-     * Link a variable to some other Data. If that linked Data is a variable,
-     * e.g. ?x = ?y, then linking will occur on that linked variable. E.g. ?x
-     * = ?y and ?x = 5, then ?y = 5.
-     */
-    void
-    link (Data *data)
+    bool
+    is_bound ()
     {
         assert(datatype == Var);
-        Data *d = this;
-        /* while the next link is not Nil */
-        while (d->var()->type() != Nil)
-            d = d->var();
-        d->set(data);
+        return (this->var()->type() != Nil);
     }
 
     void
@@ -321,17 +302,22 @@ parse_args (Intern &intern, std::vector<Data*> &patterns, int argc, char **argv)
     }
 }
 
+/*
+ * Get the value of a Data object. All atomic types are their own value. Vars
+ * which point to `Nil' are considered unbound. On the walk through all linked
+ * vars, if we run into `Nil' then that entire chain is unbound. Otherwise the
+ * atomic value at the end is the value.
+ */
 Data *
 value (Data *d)
 {
-    /*
-     * TODO: Some way to cleanly lookup unifications made to variables
-     */
-    if (d->type() == List || d->type() == Atom)
+    if (d->type() == List || d->type() == Nil || d->type() == Atom)
         return d;
-
-    while (d->type() == Var)
+    while (d->type() == Var) {
+        if (!d->is_bound())
+            return d;
         d = d->var();
+    }
     return d;
 }
 
@@ -344,7 +330,7 @@ extend (Data *a, Data *b)
     assert(a->type() == Var);
 
     /* if `a' has a value, unify with that linked value */
-    if (a->var()->type() != Nil) {
+    if (a->is_bound()) {
         unify(a->var(), b);
     }
     /* 
@@ -352,7 +338,7 @@ extend (Data *a, Data *b)
      * extend on `b' in `unify' implicitly using chained if/elseif statements.
      */
     else if (b->type() == Var) {
-        if (b->var()->type() != Nil)
+        if (b->is_bound())
             unify(a, b->var());
         else
             a->set(b);
@@ -391,8 +377,7 @@ unify (Data *a, Data *b)
     }
 
     else {
-        error("Cannot unify data of types %s and %s\n", 
-                Data::typestr(a->type()), Data::typestr(b->type()));
+        error("Cannot unify '%s' and '%s'", a->name(), b->name());
     }
 }
 
@@ -416,7 +401,7 @@ main (int argc, char **argv)
             printf("%s (%p) == %s\n", 
                         patterns[k]->list()[i]->name(),
                         patterns[k]->list()[i],
-                        value(patterns[k]->list()[i])->value());
+                        value(patterns[k]->list()[i])->name());
         }
     }
 

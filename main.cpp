@@ -6,7 +6,6 @@
 #include <cstdarg>
 #include <algorithm>
 #include <string>
-#include <sstream>
 #include <vector>
 #include <list>
 #include <map>
@@ -23,10 +22,10 @@ error (const char *format, ...)
 }
 
 enum DataType {
-    Nil,
-    List,  /* A list of Data */
-    Atom,  /* An actual value: numbers, a string, etc. */
-    Var    /* A variable which can be assigned Data (which is just Data) */
+    Nil,  /* A value that represents the void that an unbound Var points to */
+    List, /* A list of Data objects */
+    Atom, /* An actual value: numbers, a string, etc. */
+    Var   /* A variable which can be assigned Data (which is just Data) */
 };
 
 /*
@@ -43,6 +42,7 @@ private:
     } slot;
 
 public:
+    /* Create a Variable linked to some other Data (likely `nulldata') */
     Data (DataType type, std::string *name, Data* val)
         : datatype(type)
         , representation(name)
@@ -51,6 +51,7 @@ public:
         slot.data = val;
     }
 
+    /* Create Nil and Atom types. Their values are their representation */
     Data (DataType type, std::string *name, std::string *val)
         : datatype(type)
         , representation(name)
@@ -59,6 +60,7 @@ public:
         slot.string = val;
     }
 
+    /* Create a list of other Data */
     Data (DataType type, std::string *name, std::vector<Data*> *val)
         : datatype(type)
         , representation(name)
@@ -91,16 +93,6 @@ public:
         }
     }
 
-    const char *
-    name ()
-    {
-        return representation->c_str();
-    }
-
-    /*
-     * Get the value of the data determined by its type.
-     */
-
     const std::vector<Data*>&
     list ()
     {
@@ -115,12 +107,9 @@ public:
         return slot.data;
     }
 
-    bool
-    is_bound ()
-    {
-        assert(datatype == Var);
-        return (this->var()->type() != Nil);
-    }
+    /*
+     * Update existing Data objects.
+     */
 
     void
     set (Data *data)
@@ -135,6 +124,55 @@ public:
         assert(datatype == List);
         slot.list->push_back(val);
     }
+
+    /* 
+     * Returns the representation of this Data object when parsed in (e.g. ?x,
+     * 5, foo). Because all information exists at parse time, all Vars will be
+     * set to atomic type or `Nil'. So, the representation of the unified
+     * pattern can be seen by calling `name` on each Data object.
+     */
+    const char *
+    name ()
+    {
+        return representation->c_str();
+    }
+
+    /*
+     * All vars which point to `Nil' are considered unbound.
+     */
+    bool
+    is_bound ()
+    {
+        assert(datatype == Var);
+        return (this->var()->type() != Nil);
+    }
+
+    bool
+    is_atomic ()
+    {
+        return (type() == List || type() == Nil || type() == Atom);
+    }
+
+    /*
+     * Get the value of a Data object. All atomic types are their own values
+     * All unbound Vars will return themselves (which `name' returns its own
+     * representation, e.g. ?x or ?foo). Otherwise, following the linked-list
+     * of vars will return an atomic (non-nil) object.
+     */
+    Data *
+    value ()
+    {
+        Data *d = this;
+        if (d->is_atomic())
+            return d;
+        while (d->type() == Var) {
+            if (!d->is_bound())
+                return d;
+            d = d->var();
+        }
+        return d;
+    }
+
 };
 
 /*
@@ -156,7 +194,6 @@ public:
     Data *
     list (std::string name)
     {
-        /* TODO: same patterns (lists) will have same name */
         return this->data(List, name);
     }
 
@@ -167,6 +204,7 @@ public:
     }
 
 protected:
+    /* Only allocate a particular string once. Return its pointer otherwise */
     std::string*
     string (std::string str)
     {
@@ -178,6 +216,7 @@ protected:
         return &strings.back();
     }
 
+    /* Only allocate Data once (based on name). Otherwise return its pointer */
     Data *
     data (DataType type, std::string str)
     {
@@ -256,51 +295,32 @@ next_string (std::string str, int *offset)
  * Parse whitespace-delimited arguments (including those passed as quoted
  * strings) and push them into the list given by reference.
  */
-void
-parse_args (Intern &intern, std::vector<Data*> &patterns, int argc, char **argv)
+Data *
+parse_arg (Intern &intern, char *arg)
 {
-    int i;      /* argv index */
-    int n;      /* position of substring in argv[i] */
-    int len;    /* maximum length of argv[i] string */
+    int n;      /* position of substring in arg */
+    int len;    /* maximum length of arg string */
     int offset; /* total number of bytes to advance n for next substring */
     std::string name;
     Data *parent, *child;
 
-    for (i = 1; i < argc; i++) {
-        len = strlen(argv[i]);
-        parent = intern.list(argv[i]);
-        patterns.push_back(parent);
+    len = strlen(arg);
+    parent = intern.list(arg);
 
-        for (n = 0; n < len;) {
-            name = next_string(argv[i] + n, &offset);
-            assert(!name.empty());
-            if (name[0] == '?')
-                child = intern.var(name);
-            else
-                child = intern.atom(name);
-            parent->add_child(child);
-            n = n + offset;
-        }
-    }
-}
+    for (n = 0; n < len;) {
+        name = next_string(arg + n, &offset);
+        assert(!name.empty());
 
-/*
- * Get the value of a Data object. All atomic types are their own value. Vars
- * which point to `Nil' are considered unbound. On the walk through all linked
- * vars, if we run into `Nil' then that entire chain is unbound. Otherwise the
- * atomic value at the end is the value.
- */
-Data *
-value (Data *d)
-{
-    if (d->type() == List || d->type() == Nil || d->type() == Atom)
-        return d;
-    while (d->type() == Var) {
-        if (!d->is_bound())
-            return d;
-        d = d->var();
+        if (name[0] == '?')
+            child = intern.var(name);
+        else
+            child = intern.atom(name);
+
+        parent->add_child(child);
+        n = n + offset;
     }
-    return d;
+
+    return parent;
 }
 
 void
@@ -367,24 +387,32 @@ int
 main (int argc, char **argv)
 {
     Intern intern;
-    std::vector<Data*> patterns;
+    Data *p1, *p2;
+    unsigned int i;
 
-    parse_args(intern, patterns, argc, argv);
-
-    if (patterns.size() < 2)
+    if (argc < 3)
         error("Must have at least 2 patterns to test");
 
-    unify(patterns[0], patterns[1]);
-
-    unsigned int i, k;
-    for (k = 0; k < patterns.size(); k++) {
-        printf("\n");
-        for (i = 0; i < patterns[k]->list().size(); i++) {
-            printf("%s (%p) == %s\n", 
-                        patterns[k]->list()[i]->name(),
-                        patterns[k]->list()[i],
-                        value(patterns[k]->list()[i])->name());
+    for (i = 2; i < argc; i++) {
+        /* parse the first two at the same time */
+        if (i == 2) {
+            p1 = parse_arg(intern, argv[1]);
+            p2 = parse_arg(intern, argv[2]);
         }
+        /* parse only one because last arg is already parsed and unified */
+        else {
+            p1 = p2;
+            p2 = parse_arg(intern, argv[i]);
+        }
+        unify(p1, p2);
+    }
+
+    for (i = 0; i < p2->list().size(); i++) {
+        printf("%s", p2->list()[i]->value()->name());
+        if (i == p2->list().size() - 1)
+            printf("\n");
+        else
+            printf(" ");
     }
 
     return 0;

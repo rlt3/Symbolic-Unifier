@@ -264,7 +264,7 @@ private:
 };
 
 /*
- * Find the next whitespace delimited substring n the string given and set the
+ * Find the next whitespace delimited substring in the string given and set the
  * offset of the beginning of the next potential variable.
  */
 std::string
@@ -340,6 +340,8 @@ extend (Data *a, Data *b)
      * extend on `b' in `unify' implicitly using chained if/elseif statements.
      */
     else if (b->type() == Var) {
+        //if (occurs(a, b))
+        //    error("Relation `%s' -> `%s' is recursive", a->name(), b->name());
         if (b->is_bound())
             unify(a, b->var());
         else

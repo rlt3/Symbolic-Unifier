@@ -20,6 +20,103 @@ error (const char *format, ...)
     exit(1);
 }
 
+/*
+ * The following functions are the unification system which.
+ */
+
+void
+unify (Datum *a, Datum *b);
+
+/*
+ * Test whether `var' occurs in `expression'.
+ */
+bool
+occurs (Datum *var, Datum *expression)
+{
+    unsigned int i;
+
+    if (expression->type() == Var) {
+        if (var == expression)
+            return true;
+        return occurs(var, expression->var());
+    }
+    else if (expression->type() == List) {
+        for (i = 0; i < expression->list()->size(); i++)
+            if (occurs(var, expression->list()->at(i)))
+                return true;
+    }
+
+    return false;
+}
+
+/*
+ * Extend the value of `a' with the the value of `b'.
+ */
+void
+extend (Datum *a, Datum *b)
+{
+    assert(a->type() == Var);
+
+    /* if `a' has a value, unify with that linked value */
+    if (a->is_bound()) {
+        unify(a->var(), b);
+    }
+    /* 
+     * Do the same for `b' if it is a Var. We do this here because we skip the
+     * extend on `b' in `unify' implicitly using chained if/elseif statements.
+     */
+    else if (b->type() == Var) {
+        if (b->is_bound())
+            unify(a, b->var());
+        else
+            a->set(b);
+    }
+    else if (occurs(a, b)) {
+        error("Relation `%s' -> `%s' is recursive", 
+                a->representation().c_str(), b->representation().c_str());
+    }
+    /* else it's simply a variable and an atom, e.g. ?x = 5 */
+    else {
+        a->set(b);
+    }
+}
+
+/*
+ * Unify two distinct datum objects of different types.
+ */
+void
+unify (Datum *a, Datum *b)
+{
+    unsigned int i;
+
+    /* the two data objects are the same object, e.g. ?x = ?x or 5 = 5 */
+    if (a == b) {
+        return;
+    }
+
+    /* check for Vars on each side, but only set left side if both are Vars */
+    else if (a->type() == Var) {
+        extend(a, b);
+    }
+    else if (b->type() == Var) {
+        extend(b, a);
+    }
+
+    /* when given two patterns to unify */
+    else if (a->type() == List && b->type() == List) {
+        if (a->list()->size() != b->list()->size())
+            error("Patterns must be of same length");
+
+        for (i = 0; i < a->list()->size(); i++)
+            unify(a->list()->at(i), b->list()->at(i));
+    }
+
+    else {
+        error("Cannot unify '%s' and '%s'",
+                a->representation().c_str(), b->representation().c_str());
+    }
+}
+
 bool
 in_string (const int c, std::string s)
 {
@@ -118,12 +215,11 @@ Datum * expr (Data &data);
  * <func> := <name>([<expr> [, <expr> ...])
  */
 Datum *
-func (Data &data)
+func (Data &data, std::string str)
 {
-    Datum *parent = data.list(name());
+    Datum *parent = data.list(str);
 
     match('(');
-
     /* if its an empty list, just go ahead and exit */
     if (look() == ')')
         goto exit;
@@ -150,20 +246,23 @@ exit:
 /*
  * Read the next expression which is a function with zero, one, or more
  * expressions inside or simply a variable.
- * <expr> := <func> | <var>
+ * <expr> := <var> | <func> | <name>
  */
 Datum *
 expr (Data &data)
 {
-    Datum *d;
+    std::string rep;
     skipwhitespace();
 
-    if (look() == '?')
-        d = var(data);
-    else
-        d = func(data);
-
-    return d;
+    if (look() == '?') {
+        return var(data);
+    } else {
+        rep = name();
+        if (look() == '(')
+            return func(data, rep);
+        else
+            return data.atom(rep);
+    }
 }
 
 /*
@@ -172,15 +271,24 @@ expr (Data &data)
 void
 unification (Data &data)
 {
-    Datum *pat1, *pat2;
+    Datum *a, *b;
 
-    pat1 = expr(data);
+    a = expr(data);
     skipwhitespace();
-    match('=');
-    pat2 = expr(data);
 
-    printf("pat1: '%s'\n", pat1->representation().c_str());
-    printf("pat2: '%s'\n", pat2->representation().c_str());
+    if (look() != '=')
+        goto done;
+
+    match('=');
+    b = expr(data);
+
+    printf("a: '%s'\n", a->representation().c_str());
+    printf("b: '%s'\n", b->representation().c_str());
+
+    unify(a, b);
+
+done:
+    printf("%s\n", a->value()->representation().c_str());
 }
 
 int

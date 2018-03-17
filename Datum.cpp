@@ -94,7 +94,7 @@ public:
         rep = name();
         rep += "(";
         for (i = 0; i < slot.list->size(); i++) {
-            rep += slot.list->at(i)->representation();
+            rep += slot.list->at(i)->value()->representation();
             if (i < slot.list->size() - 1)
                 rep += ", ";
 
@@ -103,11 +103,11 @@ public:
         return rep;
     }
 
-    const std::vector<Datum*>&
+    const std::vector<Datum*>*
     list ()
     {
         assert(datatype == List);
-        return *slot.list;
+        return slot.list;
     }
 
     Datum*

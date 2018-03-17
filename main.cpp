@@ -1,8 +1,10 @@
+#include <iostream>
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <cctype>
 #include <cstdarg>
+#include <sstream>
 
 #include "Datum.cpp"
 #include "Data.cpp"
@@ -18,9 +20,6 @@ error (const char *format, ...)
     exit(1);
 }
 
-Datum *
-expr (Data &data);
-
 bool
 in_string (const int c, std::string s)
 {
@@ -30,36 +29,36 @@ in_string (const int c, std::string s)
     return false;
 }
 
+bool
+is_reserved (const int c)
+{
+    return in_string(c, "?(,)=");
+}
+
 /* 
- * The parser is a generic recursive descent, look-ahead parser. This is the
- * lookahead token. Only `next' affects the lookahead token and does so by
- * simplying returning the next character from the stream.
+ * The following functions are all the parser which is a look-ahead recursive
+ * descent parser. LOOK is the lookahead token which is affected only by 
+ * `next' and read only by `look()'. INPUT is simply the stream of characters
+ * that is read with `next'.
  */
-static int LOOK = -2;
+
+static int LOOK = EOF - 1;
+static std::stringstream INPUT;
 
 int
 next ()
 {
-    LOOK = getc(stdin);
+    LOOK = INPUT.get();
     return LOOK;
 }
 
 int
 look ()
 {
-    if (LOOK == -2)
+    if (LOOK == EOF - 1)
         return next();
     else
         return LOOK;
-}
-
-std::string
-match (int c)
-{
-    if (look() != c)
-        error("Expected `%c' got `%c' instead", c, look());
-    next();
-    return std::string(1, c);
 }
 
 void
@@ -69,10 +68,16 @@ skipwhitespace ()
         next();
 }
 
-bool
-is_reserved (const int c)
+/*
+ * Assert a match, exiting the program with an error if assertion fails.
+ */
+std::string
+match (int c)
 {
-    return in_string(c, "?(,)=");
+    if (look() != c)
+        error("Expected `%c' got `%c' instead", c, look());
+    next();
+    return std::string(1, c);
 }
 
 /* 
@@ -94,6 +99,9 @@ name ()
     return s;
 }
 
+/*
+ * <var> := ?<name>
+ */
 Datum *
 var (Data &data)
 {
@@ -103,8 +111,11 @@ var (Data &data)
     return data.var(rep);
 }
 
+Datum * expr (Data &data);
+
 /*
  * Parse a function and all of its arguments into a Datum list.
+ * <func> := <name>([<expr> [, <expr> ...])
  */
 Datum *
 func (Data &data)
@@ -139,8 +150,7 @@ exit:
 /*
  * Read the next expression which is a function with zero, one, or more
  * expressions inside or simply a variable.
- * <expr> := <name>([<expr> [, <expr> ...])
- *         | ?<name>
+ * <expr> := <func> | <var>
  */
 Datum *
 expr (Data &data)
@@ -177,35 +187,13 @@ int
 main (int argc, char **argv)
 {
     Data data;
-    //Datum *p1, *p2;
-    //unsigned int i;
-    
+
+    if (argc > 1)
+        INPUT.str(std::string(argv[1]));
+    else
+        INPUT << std::cin.rdbuf();
+
     unification(data);
-
-    //if (argc < 3)
-    //    error("Must have at least 2 patterns to test");
-
-    //for (i = 2; i < argc; i++) {
-    //    /* parse the first two at the same time */
-    //    if (i == 2) {
-    //        p1 = parse_arg(intern, argv[1]);
-    //        p2 = parse_arg(intern, argv[2]);
-    //    }
-    //    /* parse only one because last arg is already parsed and unified */
-    //    else {
-    //        p1 = p2;
-    //        p2 = parse_arg(intern, argv[i]);
-    //    }
-    //    unify(p1, p2);
-    //}
-
-    //for (i = 0; i < p2->list().size(); i++) {
-    //    printf("%s", p2->list()[i]->value()->name());
-    //    if (i == p2->list().size() - 1)
-    //        printf("\n");
-    //    else
-    //        printf(" ");
-    //}
 
     return 0;
 }

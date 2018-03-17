@@ -202,10 +202,8 @@ name ()
 Datum *
 var (Data &data)
 {
-    std::string rep;
-    rep = match('?');
-    rep += name();
-    return data.var(rep);
+    match('?');
+    return data.var(name());
 }
 
 Datum * expr (Data &data);
@@ -243,8 +241,6 @@ func (Data &data, std::string name)
         children.push_back(child);
         /* skip so look() won't be extraneous whitespace */
         skipwhitespace();
-        if (look() != ')')
-            rep += ", ";
     /* parse all existing arguments next */
     } while (look() == ',');
 

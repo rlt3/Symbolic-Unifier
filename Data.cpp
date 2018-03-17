@@ -15,25 +15,30 @@ public:
     Data ()
     {
         /* a set constant which represents nothing */
-        NILDATUM = this->datum(Nil, "nil");
+        NILDATUM = this->datum(Nil, "nil", NULL);
     }
 
     Datum *
     atom (std::string name)
     {
-        return this->datum(Atom, name);
+        return this->datum(Atom, name, NULL);
     }
 
+    /*
+     * The name of a list and its representation are different. E.g. f(?x, 5) 
+     * is the representation, but its name is `f'.
+     */
     Datum *
-    list (std::string name)
+    list (std::string name, std::string representation)
     {
-        return this->datum(List, name);
+        std::string *rep = this->string(representation);
+        return this->datum(List, name, rep);
     }
 
     Datum *
     var (std::string name)
     {
-        return this->datum(Var, name);
+        return this->datum(Var, name, NULL);
     }
 
 protected:
@@ -49,17 +54,33 @@ protected:
         return &strings.back();
     }
 
-    /* Allocate Datum once (based on name). Otherwise return its pointer */
     Datum *
-    datum (DatumType type, std::string str)
+    find (std::string *key)
     {
         std::map<std::string*, Datum*>::iterator it;
-        std::string *name = this->string(str);
-
         /* Return the datum if it already exists */
-        it = mappings.find(name);
+        it = mappings.find(key);
         if (it != mappings.end())
             return it->second;
+        return NULL;
+    }
+
+    /* Allocate Datum once (based on name). Otherwise return its pointer */
+    Datum *
+    datum (DatumType type, std::string str, std::string *key)
+    {
+        std::string *name;
+
+        /* If an alternate key exists to use for lookup then use it instead */
+        if (key) {
+            if (find(key))
+                return find(key);
+            name = this->string(str);
+        } else {
+            name = this->string(str);
+            if (find(name))
+                return find(name);
+        }
 
         switch (type) {
         case List:

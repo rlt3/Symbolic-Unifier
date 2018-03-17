@@ -212,43 +212,48 @@ Datum * expr (Data &data);
 
 /*
  * Parse a function and all of its arguments into a Datum list.
+ * To allow lists of the same name but which point to different Datum object
+ * we parse both the function name and also its representation (the name
+ * followed by all the representations of the arguments.
  * <func> := <name>([<expr> [, <expr> ...])
  */
 Datum *
-func (Data &data, std::string str)
+func (Data &data, std::string name)
 {
-    Datum *parent = data.list(str);
+    std::vector<Datum*> children;
+    std::string rep;
+    unsigned int i;
+    Datum *parent, *child;
 
-    /*
-     * TODO: Don't create parent until you have full representation of the
-     * function. This means parsing all children first, adding their forms to
-     * the parent representation, and then passing that as the name for the
-     * parent list. This way two lists can be created with the same name but
-     * because they have different values they will be considered different
-     * lists.
-     */
+    rep = name;
+    rep += match('(');
 
-    match('(');
     /* if its an empty list, just go ahead and exit */
-    if (look() == ')')
-        goto exit;
-
-    /* parse the first expression in the argument list */
-    parent->add_child(expr(data));
-    /* skip so look() won't be extraneous whitespace */
-    skipwhitespace();
-
-    /* parse all existing arguments next */
-    if (look() == ',') {
-        do {
-            match(',');
-            parent->add_child(expr(data));
-            skipwhitespace();
-        } while (look() == ',');
+    if (look() == ')') {
+        rep += match(')');
+        return data.list(name, rep);
     }
 
-exit:
-    match(')');
+    do {
+        /* parse the first expression in the argument list */
+        if (look() == ',')
+            match(',');
+        child = expr(data);
+        rep += child->representation();
+        children.push_back(child);
+        /* skip so look() won't be extraneous whitespace */
+        skipwhitespace();
+        if (look() != ')')
+            rep += ", ";
+    /* parse all existing arguments next */
+    } while (look() == ',');
+
+    rep += match(')');
+    parent = data.list(name, rep);
+
+    for (i = 0; i < children.size(); i++)
+        parent->add_child(children.at(i));
+
     return parent;
 }
 

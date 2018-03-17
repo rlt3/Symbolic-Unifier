@@ -88,7 +88,10 @@ public:
         std::string rep;
         unsigned int i;
 
-        if (type() == Var || type() == Atom || type() == Nil)
+        if (type() == Var)
+            return std::string(1, '?') + name();
+
+        if (type() == Atom || type() == Nil)
             return name();
 
         rep = name();
@@ -100,6 +103,7 @@ public:
 
         }
         rep += ")";
+
         return rep;
     }
 

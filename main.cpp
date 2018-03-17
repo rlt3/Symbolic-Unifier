@@ -18,6 +18,9 @@ error (const char *format, ...)
     exit(1);
 }
 
+Datum *
+expr (Data &data);
+
 bool
 in_string (const int c, std::string s)
 {
@@ -27,12 +30,11 @@ in_string (const int c, std::string s)
     return false;
 }
 
-bool
-is_reserved (const int c)
-{
-    return in_string(c, "(),?");
-}
-
+/* 
+ * The parser is a generic recursive descent, look-ahead parser. This is the
+ * lookahead token. Only `next' affects the lookahead token and does so by
+ * simplying returning the next character from the stream.
+ */
 static int LOOK = -2;
 
 int
@@ -60,18 +62,28 @@ match (int c)
     return std::string(1, c);
 }
 
+void
+skipwhitespace ()
+{
+    while (isspace(look()))
+        next();
+}
+
+bool
+is_reserved (const int c)
+{
+    return in_string(c, "?(,)=");
+}
+
+/* 
+ * Read the next whitespace delimited string.
+ * <name> := ([^?(,)=]a-zA-Z)+
+ */
 std::string
 name ()
 {
     std::string s;
-
-    printf("NAME: LOOK: %c\n", look());
-
-    /* Skip all whitespace */
-    while (isspace(look()))
-        next();
-
-    printf("NAME: LOOK-WHITE: %c\n", look());
+    skipwhitespace();
 
     /* Read the whitespace-delimited string */
     while (!(is_reserved(look()) || isspace(look()) || look() == EOF)) {
@@ -79,42 +91,86 @@ name ()
         next();
     }
 
-    printf("NAME: RETURN: '%s'\n", s.c_str());
-
     return s;
 }
 
-std::string
-expr ()
+Datum *
+var (Data &data)
 {
-    std::string representation;
-
-    if (look() == '?') {
-        representation = match('?');
-        representation += name();
-    } else {
-        representation = name();
-        representation += match('(');
-        representation += expr();
-        representation += match(')');
-    }
-
-    return representation;
+    std::string rep;
+    rep = match('?');
+    rep += name();
+    return data.var(rep);
 }
 
-void
-parse (Data &data)
+/*
+ * Parse a function and all of its arguments into a Datum list.
+ */
+Datum *
+func (Data &data)
 {
-    printf("expr: '%s'\n", expr().c_str());
-    //std::string s = name();
-    //while (!s.empty()) {
-    //    printf("%s\n", s.c_str());
-    //    if (LOOK == '(')
-    //        printf("(");
-    //    if (LOOK == ')')
-    //        printf(")");
-    //    s = name();
-    //}
+    Datum *parent = data.list(name());
+
+    match('(');
+
+    /* if its an empty list, just go ahead and exit */
+    if (look() == ')')
+        goto exit;
+
+    /* parse the first expression in the argument list */
+    parent->add_child(expr(data));
+    /* skip so look() won't be extraneous whitespace */
+    skipwhitespace();
+
+    /* parse all existing arguments next */
+    if (look() == ',') {
+        do {
+            match(',');
+            parent->add_child(expr(data));
+            skipwhitespace();
+        } while (look() == ',');
+    }
+
+exit:
+    match(')');
+    return parent;
+}
+
+/*
+ * Read the next expression which is a function with zero, one, or more
+ * expressions inside or simply a variable.
+ * <expr> := <name>([<expr> [, <expr> ...])
+ *         | ?<name>
+ */
+Datum *
+expr (Data &data)
+{
+    Datum *d;
+    skipwhitespace();
+
+    if (look() == '?')
+        d = var(data);
+    else
+        d = func(data);
+
+    return d;
+}
+
+/*
+ * <unification> := <expr> = <expr>
+ */
+void
+unification (Data &data)
+{
+    Datum *pat1, *pat2;
+
+    pat1 = expr(data);
+    skipwhitespace();
+    match('=');
+    pat2 = expr(data);
+
+    printf("pat1: '%s'\n", pat1->representation().c_str());
+    printf("pat2: '%s'\n", pat2->representation().c_str());
 }
 
 int
@@ -124,7 +180,7 @@ main (int argc, char **argv)
     //Datum *p1, *p2;
     //unsigned int i;
     
-    parse(data);
+    unification(data);
 
     //if (argc < 3)
     //    error("Must have at least 2 patterns to test");

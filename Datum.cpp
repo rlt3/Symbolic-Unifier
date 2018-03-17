@@ -20,7 +20,7 @@ enum DatumType {
 class Datum {
 private:
     DatumType datatype;
-    std::string *representation;
+    std::string *rep;
     union {
         Datum *datum;
         std::string *string;
@@ -31,7 +31,7 @@ public:
     /* Create a Variable linked to some other Datum (likely `NILDATUM') */
     Datum (DatumType type, std::string *name, Datum* val)
         : datatype(type)
-        , representation(name)
+        , rep(name)
     {
         assert(datatype == Var);
         slot.datum = val;
@@ -40,7 +40,7 @@ public:
     /* Create Nil and Atom types. Their values are their representation */
     Datum (DatumType type, std::string *name, std::string *val)
         : datatype(type)
-        , representation(name)
+        , rep(name)
     {
         assert(datatype == Atom || datatype == Nil);
         slot.string = val;
@@ -49,7 +49,7 @@ public:
     /* Create a list of other Datum */
     Datum (DatumType type, std::string *name, std::vector<Datum*> *val)
         : datatype(type)
-        , representation(name)
+        , rep(name)
     {
         assert(datatype == List);
         slot.list = val;
@@ -77,6 +77,30 @@ public:
         default:
             assert(0);
         }
+    }
+
+    /*
+     * Returns the representation of the datum as it was parsed.
+     */
+    std::string
+    representation ()
+    {
+        std::string rep;
+        unsigned int i;
+
+        if (type() == Var || type() == Atom || type() == Nil)
+            return name();
+
+        rep = name();
+        rep += "(";
+        for (i = 0; i < slot.list->size(); i++) {
+            rep += slot.list->at(i)->representation();
+            if (i < slot.list->size() - 1)
+                rep += ", ";
+
+        }
+        rep += ")";
+        return rep;
     }
 
     const std::vector<Datum*>&
@@ -111,16 +135,13 @@ public:
         slot.list->push_back(val);
     }
 
-    /* 
-     * Returns the representation of this Datum object when parsed in (e.g. ?x,
-     * 5, foo). Because all information exists at parse time, all Vars will be
-     * set to atomic type or `Nil'. So, the representation of the unified
-     * pattern can be seen by calling `name` on each Datum object.
+    /*
+     * Returns the name of the data as it was read when parsed in.
      */
     const char *
     name ()
     {
-        return representation->c_str();
+        return rep->c_str();
     }
 
     /*

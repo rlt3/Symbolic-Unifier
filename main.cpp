@@ -219,6 +219,15 @@ func (Data &data, std::string str)
 {
     Datum *parent = data.list(str);
 
+    /*
+     * TODO: Don't create parent until you have full representation of the
+     * function. This means parsing all children first, adding their forms to
+     * the parent representation, and then passing that as the name for the
+     * parent list. This way two lists can be created with the same name but
+     * because they have different values they will be considered different
+     * lists.
+     */
+
     match('(');
     /* if its an empty list, just go ahead and exit */
     if (look() == ')')

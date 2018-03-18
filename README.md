@@ -17,8 +17,8 @@ output them without error. To unify two expressions assert them with `=`, e.g.
 
 Variables are defined as any constant prefixed with a `?`. A variable function
 isn't not allowed, e.g. `?x()`. Constants are any value that's not a function,
-e.g. `5' or 'a'. And a function is just a name with parenthesis wrapping
-arguments, e.g. `f(?x)`, 'g(?y, f(?z))', `h()`.
+e.g. `5` or `a`. And a function is just a name with parenthesis wrapping
+arguments, e.g. `f(?x)`, `g(?y, f(?z))`, `h()`.
 
 Don't forget to give the entire expression as a string, e.g. `./unify "f(?x)"`.
 
@@ -28,8 +28,8 @@ I needed this unifier for a larger project. I also really wanted to build a
 parser for a somewhat mathematical language.
 
 I really enjoyed how the specific data isn't parsed for anything other than a
-pointer value. For the expression 'f(?x, 5) = f(?y, ?x)` the values `f`,
-`?x`, `?y` and '5' all have a different pointer values, but they are chained so
-that `?y` becomes the value of `?x' and `?x` becomes `5'. There's no parsing
+pointer value. For the expression `f(?x, 5) = f(?y, ?x)` the values `f`,
+`?x`, `?y` and `5` all have a different pointer values, but they are chained so
+that `?y` becomes the value of `?x` and `?x` becomes `5`. There's no parsing
 different for explicit data types like integers. Simply test for equality with
 pointers.

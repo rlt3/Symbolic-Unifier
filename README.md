@@ -16,7 +16,7 @@ output them without error. To unify two expressions assert them with `=`, e.g.
 `f(?x) = f(5)`. That will return `f(5)`.
 
 Variables are defined as any constant prefixed with a `?`. A variable function
-isn't not allowed, e.g. `?x()`. Constants are any value that's not a function,
+isn't allowed, e.g. `?x()`. Constants are any value that's not a function,
 e.g. `5` or `a`. And a function is just a name with parenthesis wrapping
 arguments, e.g. `f(?x)`, `g(?y, f(?z))`, `h()`.
 

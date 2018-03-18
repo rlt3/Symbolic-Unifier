@@ -20,10 +20,6 @@ error (const char *format, ...)
     exit(1);
 }
 
-/*
- * The following functions are the unification system which.
- */
-
 void
 unify (Datum *a, Datum *b);
 
@@ -117,21 +113,6 @@ unify (Datum *a, Datum *b)
     }
 }
 
-bool
-in_string (const int c, std::string s)
-{
-    for (unsigned i = 0; i < s.size(); i++)
-        if (s[i] == c)
-            return true;
-    return false;
-}
-
-bool
-is_reserved (const int c)
-{
-    return in_string(c, "?(,)=");
-}
-
 /* 
  * The following functions are all the parser which is a look-ahead recursive
  * descent parser. LOOK is the lookahead token which is affected only by 
@@ -164,6 +145,22 @@ skipwhitespace ()
     while (isspace(look()))
         next();
 }
+
+bool
+in_string (const int c, std::string s)
+{
+    for (unsigned i = 0; i < s.size(); i++)
+        if (s[i] == c)
+            return true;
+    return false;
+}
+
+bool
+is_reserved (const int c)
+{
+    return in_string(c, "?(,)=");
+}
+
 
 /*
  * Assert a match, exiting the program with an error if assertion fails.
@@ -210,9 +207,10 @@ Datum * expr (Data &data);
 
 /*
  * Parse a function and all of its arguments into a Datum list.
- * To allow lists of the same name but which point to different Datum object
- * we parse both the function name and also its representation (the name
- * followed by all the representations of the arguments.
+ * To allow functions of the same name but which point to different Datum
+ * object we parse both the function name and also its representation (the name
+ * followed by all the representations of the arguments). Then we intern based
+ * off its representation rather than its name.
  * <func> := <name>([<expr> [, <expr> ...])
  */
 Datum *
@@ -232,16 +230,15 @@ func (Data &data, std::string name)
         return data.list(name, rep);
     }
 
+    /* parse all existing arguments next */
     do {
-        /* parse the first expression in the argument list */
-        if (look() == ',')
+        if (look() == ',') /* for first argument in list */
             match(',');
         child = expr(data);
         rep += child->representation();
         children.push_back(child);
         /* skip so look() won't be extraneous whitespace */
         skipwhitespace();
-    /* parse all existing arguments next */
     } while (look() == ',');
 
     rep += match(')');
@@ -291,9 +288,6 @@ unification (Data &data)
 
     match('=');
     b = expr(data);
-
-    printf("a: '%s'\n", a->representation().c_str());
-    printf("b: '%s'\n", b->representation().c_str());
 
     unify(a, b);
 

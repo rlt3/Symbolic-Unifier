@@ -31,5 +31,4 @@ I really enjoyed how the specific data isn't parsed for anything other than a
 pointer value. For the expression `f(?x, 5) = f(?y, ?x)` the values `f`,
 `?x`, `?y` and `5` all have a different pointer values, but they are chained so
 that `?y` becomes the value of `?x` and `?x` becomes `5`. There's no parsing
-different for explicit data types like integers. Simply test for equality with
-pointers.
+for explicit data types like integers. Simply test for equality with pointers.

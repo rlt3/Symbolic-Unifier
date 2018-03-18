@@ -6,8 +6,8 @@
 #include <cstdarg>
 #include <sstream>
 
-#include "Datum.cpp"
-#include "Data.cpp"
+#include "Datum.hpp"
+#include "Data.hpp"
 
 void
 error (const char *format, ...)
@@ -283,7 +283,7 @@ unification (Data &data)
     a = expr(data);
     skipwhitespace();
 
-    if (look() != '=')
+    if (look() == EOF)
         goto done;
 
     match('=');
@@ -295,15 +295,45 @@ done:
     printf("%s\n", a->value()->representation().c_str());
 }
 
+void
+usage (const char *prog)
+{
+    fprintf(stderr,
+        "Usage: %s \"[EXPRESSION]\"\n"
+        "See: https://github.com/rlt3/Symbolic-Unifier for more information.\n"
+        "This program unifies expressions (given as a string) if possible.\n"
+        "Expressions are defined as functions, constants, or variables.\n"
+        "A function can have any number of arguments of any type.\n"
+        "A constant is simply a value, e.g. 5 or H.\n"
+        "Variables are defined as any constant prefixed with ?.\n"
+        "Examples:\n"
+        "    'f(?x) = f(5)'\n"
+        "       => f(5)\n"
+        "    'g(?x) = ?y'\n"
+        "        => g(?x)\n"
+        "    'f(?x, ?x) = f(g(a, ?y, c), g(a, b, ?z))\n"
+        "        => f(g(a, b, c), g(a, b, c))'\n"
+        "    'h(?x)\n"
+        "        => h(?x)\n",
+            prog);
+    exit(1);
+}
+
 int
 main (int argc, char **argv)
 {
     Data data;
 
-    if (argc > 1)
+    if (argc > 1) {
+        if (strlen(argv[1]) == 0)
+            usage(argv[0]);
         INPUT.str(std::string(argv[1]));
-    else
+    }
+    else {
+        if (std::cin.rdbuf()->in_avail() == 0)
+            usage(argv[0]);
         INPUT << std::cin.rdbuf();
+    }
 
     unification(data);
 

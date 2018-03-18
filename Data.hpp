@@ -2,7 +2,7 @@
 #define DATA_CPP
 
 #include <algorithm>
-#include "Datum.cpp"
+#include "Datum.hpp"
 
 /*
  * This class owns all memory allocated for any type of Datum. Each Datum is
@@ -75,6 +75,7 @@ protected:
         if (key) {
             if (find(key))
                 return find(key);
+            /* but the name of the Datum should always be what was given */
             name = this->string(str);
         } else {
             name = this->string(str);
